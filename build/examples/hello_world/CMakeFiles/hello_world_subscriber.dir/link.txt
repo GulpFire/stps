@@ -1,0 +1,1 @@
+/usr/bin/c++ -rdynamic CMakeFiles/hello_world_subscriber.dir/hello_world_subscriber/hello_world_subscriber.cc.o -o hello_world_subscriber  ../../libstps.a -lpthread 

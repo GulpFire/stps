@@ -1,0 +1,2 @@
+/usr/bin/ar qc libstps.a CMakeFiles/stps.dir/stps/executor/executor.cc.o CMakeFiles/stps.dir/stps/executor/executor_impl.cc.o CMakeFiles/stps.dir/stps/publisher/publisher_session.cc.o CMakeFiles/stps.dir/stps/publisher/publisher_impl.cc.o CMakeFiles/stps.dir/stps/publisher/publisher.cc.o CMakeFiles/stps.dir/stps/subscriber/subscriber_session_impl.cc.o CMakeFiles/stps.dir/stps/subscriber/subscriber_session.cc.o CMakeFiles/stps.dir/stps/subscriber/subscriber.cc.o
+/usr/bin/ranlib libstps.a

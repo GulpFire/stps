@@ -1,4 +1,5 @@
-#include "executor_impl.h"
+#include <stps/executor/executor_impl.h>
+#include <iostream>
 
 namespace stps
 {
@@ -12,7 +13,7 @@ namespace stps
 	{
 		std::stringstream ss;
 		ss << std::this_thread::get_id();
-		std::string thread_id = ss.id();
+		std::string thread_id = ss.str();
 		std::cout << "Executor: Deleting from thread " << thread_id << std::endl;
 		for (std::thread& thread : thread_pool_)
 		{

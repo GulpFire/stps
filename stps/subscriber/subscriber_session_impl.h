@@ -11,12 +11,13 @@
 
 namespace stps
 {
-class SubscriberSessionImpl : public std::enabled_shared_from_this<SubscriberSessionImpl>
+class SubscriberSessionImpl : public std::enable_shared_from_this<SubscriberSessionImpl>
 {
     public:
         SubscriberSessionImpl(const std::shared_ptr<asio::io_service>& io_service,
-                uint16_t address, int port, 
-                const std::function<std::shared_ptr<SubscriberSessionImpl>&>& session_closed_handler);
+                const std::string& address, uint16_t port, int max_reconnection_attempts,
+                const std::function<std::shared_ptr<std::vector<char>>()>& get_buffer_handler,
+                const std::function<void(const std::shared_ptr<SubscriberSessionImpl>&)>& session_closed_handler);
 
         SubscriberSessionImpl(const SubscriberSessionImpl&) = delete;
         SubscriberSessionImpl& operator=(const SubscriberSessionImpl&) = delete;
@@ -53,12 +54,12 @@ class SubscriberSessionImpl : public std::enabled_shared_from_this<SubscriberSes
         asio::io_service::strand data_strand_;
 
         const std::function<std::shared_ptr<std::vector<char>>()> get_buffer_handler_;
-        const std::function<void(const std::shared_ptr<SusbcriberSessionImpl>&)> session_closed_handler_;
+        const std::function<void(const std::shared_ptr<SubscriberSessionImpl>&)> session_closed_handler_;
         std::function<void(const std::shared_ptr<std::vector<char>>&, const std::shared_ptr<TCPHeader>&)> synchronous_callback_;
 
         void resolveEndpoint();
 
-        void connectToEndPoint(const asio::ip::tcp::resolver::iterator& resolved_endpoints);
+        void connectToEndpoint(const asio::ip::tcp::resolver::iterator& resolved_endpoints);
 
         void sendProtokolHandshakeRequest();
 

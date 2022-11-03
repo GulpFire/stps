@@ -1,8 +1,9 @@
-#include <stps/subscriber/subscriber_imp.h>
-#include <protocol_handshake_message.h>
+#include <stps/subscriber/subscriber_session_impl.h>
+
+#include <stps/protocol_handshake_message.h>
 
 #include "endian.h"
-
+#include <iostream>
 namespace stps
 {
 SubscriberSessionImpl::SubscriberSessionImpl(const std::shared_ptr<asio::io_service>& io_service, 
@@ -14,11 +15,11 @@ SubscriberSessionImpl::SubscriberSessionImpl(const std::shared_ptr<asio::io_serv
     , resolver_(*io_service)
     , max_reconnection_attempts_(max_reconnection_attempts)
     , retries_left_(max_reconnection_attempts)
-    , retry_timer(*io_service, std::chrono::seconds(1))
+    , retry_timer_(*io_service, std::chrono::seconds(1))
     , canceled_(false)
     , data_socket_(*io_service)
     , data_strand_(*io_service)
-    , get_buffer_handler(get_buffer_handler)
+    , get_buffer_handler_(get_buffer_handler)
     , session_closed_handler_(session_closed_handler)
 {
 
@@ -61,7 +62,7 @@ void SubscriberSessionImpl::resolveEndpoint()
                 }
                 else
                 {
-                    me->connectionToEndpoint(resolved_endpoints);
+                    me->connectToEndpoint(resolved_endpoints);
                 }
             });
 }
@@ -181,7 +182,7 @@ void SubscriberSessionImpl::connectionFailedHanlder()
     }
 }
 
-void SusbcriberSessionImpl::readHeaderLength()
+void SubscriberSessionImpl::readHeaderLength()
 {
     if (canceled_)
     {
@@ -189,12 +190,12 @@ void SusbcriberSessionImpl::readHeaderLength()
         return;
     }
     
-    std::shared_ptr<TCPHeader> headre = std::make_shared<TCPHeader>();
+    std::shared_ptr<TCPHeader> header = std::make_shared<TCPHeader>();
 
     asio::async_read(data_socket_,
             asio::buffer(&(header->header_size), sizeof(header->header_size)),
             asio::transfer_at_least(sizeof(header->header_size)),
-            data_strand_wrap([me = shared_from_this(), header](asio::error_code ec, std::size_t)
+            data_strand_.wrap([me = shared_from_this(), header](asio::error_code ec, std::size_t)
                 {
                     if (ec)
                     {
@@ -224,7 +225,7 @@ void SubscriberSessionImpl::readHeaderContent(const std::shared_ptr<TCPHeader>& 
         return;
     }
 
-    const uint16_t remote_header_size = 1e16toh(header->header_size);
+    const uint16_t remote_header_size = le16toh(header->header_size);
     const uint16_t my_header_size = sizeof(*header);
     const uint16_t bytes_to_read_from_socket = 
         std::min(remote_header_size, my_header_size) - sizeof(header->header_size);
@@ -232,7 +233,7 @@ void SubscriberSessionImpl::readHeaderContent(const std::shared_ptr<TCPHeader>& 
         (remote_header_size < my_header_size ? (remote_header_size - my_header_size) : 0);
 
     asio::async_read(data_socket_, 
-            asio::buffer(&reinterpret_cast<cahr*>(header.get())[sizeof(header->header_size)], bytes_to_read_from_socket),
+            asio::buffer(&reinterpret_cast<char*>(header.get())[sizeof(header->header_size)], bytes_to_read_from_socket),
             asio::transfer_at_least(bytes_to_read_from_socket),
             data_strand_.wrap([me = shared_from_this(), header, bytes_to_discard_from_socket](asio::error_code ec, std::size_t)
                     {
@@ -240,13 +241,13 @@ void SubscriberSessionImpl::readHeaderContent(const std::shared_ptr<TCPHeader>& 
                         {
                             std::cout << "SubscriberSession " << me->endpointToString()
                             << ": Error reading header content: " << ec.message();
-                            me->connctionFailedHandler();
+                            me->connectionFailedHandler();
                             return;
                         }
                         
                         std::cout << "SubscriberSession " << me->endpointToString() 
                         << ": Received header content: " << "data_size: " 
-                        << std::to_string(1e64toh(header->data_size));
+                        << std::to_string(le64toh(header->data_size));
 
                         if (bytes_to_discard_from_socket > 0)
                         {
@@ -269,8 +270,8 @@ void SubscriberSessionImpl::discardDataBetweenHeaderAndPayload(const std::shared
         return;
     }
     
-    std::vector<char> data_wo_discard;
-    data_to_discard.resize(byets_to_discard);
+    std::vector<char> data_to_discard;
+    data_to_discard.resize(bytes_to_discard);
 
     std::cout << "SubscriberSession " << endpointToString() << ": Discarding " 
         << std::to_string(bytes_to_discard) << " bytes after the header.\n";
@@ -311,16 +312,16 @@ void SubscriberSessionImpl::readPayload(const std::shared_ptr<TCPHeader>& header
 
     std::shared_ptr<std::vector<char>> data_buffer = get_buffer_handler_();
 
-    if (data_buffer->capacity() < 1e64toh(header->data_size))
+    if (data_buffer->capacity() < le64toh(header->data_size))
     {
-        data_buffer->reserve(static_cast<size_t>(1e64toh(header->data_size) * 1.1));
+        data_buffer->reserve(static_cast<size_t>(le64toh(header->data_size) * 1.1));
     }
 
-    data_buffer->resize(1e64toh(header->data_size));
+    data_buffer->resize(le64toh(header->data_size));
 
     asio::async_read(data_socket_,
-            asio::buffer(data_buffer->data(), 1e64toh(header->data_size)),
-            asio::transfer_at_least(1e64toh(header->data_size)),
+            asio::buffer(data_buffer->data(), le64toh(header->data_size)),
+            asio::transfer_at_least(le64toh(header->data_size)),
             data_strand_.wrap([me = shared_from_this(), header, data_buffer](asio::error_code ec, std::size_t)
                 {
                     if (ec)
@@ -340,7 +341,7 @@ void SubscriberSessionImpl::readPayload(const std::shared_ptr<TCPHeader>& header
                         std::memcpy(&handshake_message, data_buffer->data(), bytes_to_copy);
                         std::cout << "SubscriberSession " << me->endpointToString() << 
                         ": Received Handshake message. Using Protocol Version v" 
-                        << std::to_string(handshake_message.protocol_versions) << std::endl;
+                        << std::to_string(handshake_message.protocol_version) << std::endl;
                     }
                     else if (header->type == MessageContentType::RegularPayload)
                     {
@@ -421,7 +422,7 @@ void SubscriberSessionImpl::cancel()
     resolver_.cancel();
 }
 
-bool SubscriberSessaionImpl::isConnected() const
+bool SubscriberSessionImpl::isConnected() const
 {
     asio::error_code ec;
     data_socket_.remote_endpoint(ec);

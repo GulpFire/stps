@@ -14,7 +14,7 @@ class SubscriberSession
     friend SubscriberImpl;
 
     public:
-    SubscriberSesssion(const SubscriberSession&) = default;
+    SubscriberSession(const SubscriberSession&) = default;
     SubscriberSession& operator=(const SubscriberSession&) = default;
     SubscriberSession& operator=(SubscriberSession&) = default;
     SubscriberSession(SubscriberSession&&) = default;

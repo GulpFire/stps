@@ -78,7 +78,7 @@ bool PublisherImpl::start(const std::string& address, uint16_t port)
 
     {
         asio::error_code ec;
-        acceptor_.listen(asio::socket_base::max_listen_connections, ec);
+        acceptor_.listen(asio::basic_socket::max_listen_connections, ec);
         if (ec)
         {
             std::cout << "Publisher " << toString(endpoint) 

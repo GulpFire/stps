@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stps/executor/executor.h>
-
+#include <stps/publisher/publisher_session.h>
 #include <asio.hpp>
 #include <recycle/shared_pool.hpp>
 
@@ -49,11 +49,11 @@ class PublisherImpl : public std::enable_shared_from_this<PublisherImpl>
 
         struct BufferPoolLockPolicy
         {
-            using MutexType = std::mutex;
-            using LockType = std::lock_guard<MutexType>;
+            using mutex_type = std::mutex;
+            using lock_type = std::lock_guard<mutex_type>;
         };
 
-        recycle::shared_pool<std::vector<char>, BufferPoolLockPolycy> buffer_pool_;
+        recycle::shared_pool<std::vector<char>, BufferPoolLockPolicy> buffer_pool_;
 
         void acceptClient();
 
@@ -61,6 +61,6 @@ class PublisherImpl : public std::enable_shared_from_this<PublisherImpl>
 
         std::string localEndpointToString() const;
 
-}
+};
 
 } // namespace stps

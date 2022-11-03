@@ -1,271 +1,302 @@
-#include <stps/publisher/publisher_impl.h>
 #include <stps/publisher/publisher_session.h>
-#include <stps/executor/executor.h>
-
+#include <stps/tcp_header.h>
+#include <stps/protocol_handshake_message.h>
+#include <thread>
 #include <endian.h>
+
 #include <iostream>
 
 namespace stps
 {
-PublisherImpl::PublisherImpl(const std::shared_ptr<Executor>& executor)
-    : is_running_(false)
-    , executor_(executor)
-    , acceptor_(*executor_->executor_impl_->ioService())
+PublisherSession::PublisherSession(const std::shared_ptr<asio::io_service>& io_service,
+        const std::function<void(const std::shared_ptr<PublisherSession>&)>& session_closed_handler)
+    : io_service_(io_service)
+    , state_(State::NotStarted)
+    , session_closed_handler_(session_closed_handler)
+    , data_socket_(*io_service_)
+    , data_strand_(*io_service_)
+    , sending_in_progress_(false)
 {
-    
+
 }
 
-PublisherImpl::~PublisherImpl()
+PublisherSession::~PublisherSession()
 {
     std::stringstream ss;
     ss << std::this_thread::get_id();
     std::string thread_id = ss.str();
-    std::cout << "Publisher " << localEndpointToString() << ": Deleting from thread " + thread_id + "..." << std::endl;
-
-    if (is_running_)
-    {
-        cancel();
-    }
+    std::cout << "PublisherSession " << endpointToString() << ": Deleting from thread "
+        << thread_id << "...\n";
 }
 
-bool PublisherImpl::start(const std::string& address, uint16_t port)
+void PublisherSession::start()
 {
-    asio::error_code make_address_ec;
-    asio::ip::tcp:endpoint endpoint(asio::ip::make_address(address, make_address_ec), port);
-    
-    if (make_address_ec)
-    {
-        return false;
-    }
-
     {
         asio::error_code ec;
-        acceptor_.open(endpoint.protol(), ec);
+        data_socket_.set_option(asio::ip::tcp::no_delay(true), ec);
         if (ec)
-        {
-            std::cout << "Publisher " << toString(endpoint) << ": Error opening acceptor: " << ec.message() << std::endl;
-            return false;
-        }
+            std::cout << "PublisherSession " << endpointToString() 
+                << ": Failed setting tcp::no_delay." << std::endl;
     }
 
-    {
-        asio::error_code ec;
-        acceptor_.set_option(asio::ip::tcp::acceptor::reuse_address(true), ec);
-        if (ec)
-        {
-            std::cout << "Publisher " << toString(endpoint) << ": Error setting reuse_address option: " << ec.message() << std::endl;
-            return false;
-        }
-    }
+    state_ = State::Handshaking;
 
-    {
-        asio::error_code ec;
-        acceptor_.bind(endpoint, ec);
-        if (ec)
-        {
-            std::cout << "Publisher " << toString(endpoint) << ": Error binding acceptor: " + ec.message() << std::endl;
-            return false;
-        }
-    }
-
-    {
-        asio::error_code ec;
-        acceptor_.listen(asio::socekt_base::max_listen_connections, ec);
-        if (ec)
-        {
-            std::cout << "Publisher " << toString(endpoint) + ": Error listening on acceptor: " << ec.message() << std::endl;
-            return false;
-        }
-    }
-
-    std::cout << "Publisher " << toString(endpoint) << ": Create publisher and waiting for clients." << std::endl;
-
-    is_running_ = true;
-
-    acceptClient();
-    return true;
+    receiveTcpPacket();
 }
 
-void PublisherImpl::cancel()
+void PublisherSession::cancel()
 {
+    sessionClosedHandler();
+}
+
+void PublisherSession::sessionClosedHandler()
+{
+    State previous_state = (state_.exchange(State::Canceled));
+    if (previous_state == State::Canceled)
+        return;
+
     {
         asio::error_code ec;
-        acceptor_.close(ec);
-        acceptor_.cancel(ec);
+        data_socket_.close(ec);
     }
 
-    is_running_ = false;
+    session_closed_handler_(shared_from_this());
+}
 
-    std::vector<std::shared_ptr<PublisherSession>> publisher_sessions;
-
-    {
-        std::lock_guard<std::mutex> publisher_sessions_lock(publisher_session_mtx_);
-        publisher_sessions = publisher_sessions_;
-    }
-
-    for (const auto& session : publisher_sessions)
-    {
-        session->cancel();
-    }
-}   
-
-void PublisherImpl::acceptClient()
+void PublisherSession::readHeaderLength()
 {
-    std::cout << "Publisher " << localEndpointToString() << ": Waiting for new client... " << std::endl;
+    if (state_ == State::Canceled) return;
 
-    std::function<void(const std::shared_ptr<PublisherSession>&)> publisher_session_closed_handler = 
-        [ me = shared_from_this()](const std::shared_ptr<PublisherSession>& session) -> void
-        {
-            std::lock_guard<std::mutex> publisher_sessions_lock(me->publisher_sessions_mtx_);
-            auto session_it = std::find(me->publisher_sessions_.begin(), me->publisher_sessions_.end(), session);
-            if (session_it != me->publisher_sessions_.end())
-            {
-                me->publisher_sessions_.erase(session_it);
-            }
-            else
-            {
-                std::cout << "Publisher " << me->localEndpointToString() + ": Tring to delete a non-exisiting publisher session." << std::endl;
-            }
-        };
+    std::shared_ptr<TCPHeader> header = std::make_shared<TCPHeader>();
 
-    auto session = std::make_shared<PublisherSession>(executor_->executor_impl_->ioService(), publisher_session_closed_handler);
-    acceptor_.async_accept(session->getSocket(),
-            [session, me = shared_from_this()](asio::error_code ec)
+    asio::async_read(data_socket_, 
+            asio::buffer(&(header->header_size), sizeof(header->header_size)),
+            asio::transfer_at_least(sizeof(header->header_size)),
+            data_strand_.wrap([me = shared_from_this(), header](asio::error_code ec, std::size_t)
+                {
+                    if (ec)
+                    {
+                        me->sessionClosedHandler();
+                        return;
+                    }
+                    me->readHeaderContent(header);
+                }));
+}
+
+void PublisherSession::readHeaderContent(const std::shared_ptr<TCPHeader>& header)
+{
+    if (state_ == State::Canceled)
+        return;
+
+    if (header->header_size < sizeof(header->header_size))
+    {
+        sessionClosedHandler();
+        return;
+    }
+
+    const uint16_t remote_header_size = le16toh(header->header_size);
+    const uint16_t my_header_size = sizeof(*header);
+
+    const uint16_t bytes_to_read_from_socket = 
+        std::min(remote_header_size, my_header_size) - sizeof(header->header_size);
+    const uint16_t bytes_to_discard_from_socket = 
+        (remote_header_size > my_header_size ? (remote_header_size - my_header_size) : 0);
+
+    asio::async_read(data_socket_,
+            asio::buffer(&reinterpret_cast<char*>(header.get())[sizeof(header->header_size)], 
+                bytes_to_read_from_socket),
+            asio::transfer_at_least(bytes_to_read_from_socket),
+            data_strand_.wrap([me = shared_from_this(), header,
+            bytes_to_discard_from_socket](asio::error_code ec, std::size_t)
             {
                 if (ec)
                 {
-                    std::cout << "Publisher " << localEndpointToString() 
-                    << ": Error while waiting for subscriber: " << ec.message() 
-                    << std::endl;
+                    me->sessionClosedHandler();
                     return;
                 }
-                else 
+                if (bytes_to_discard_from_socket > 0)
                 {
-                    std::cout << "Publisher " << me->localEndpointToString()
-                    << ": Subscriber " + session->remoteEndpointToString()
-                    << " has connected." << std::endl;
+                    me->discardDataBetweenHeaderAndPayload(header, bytes_to_discard_from_socket);
                 }
-
-                session->start();
-
+                else
                 {
-                    std::lock_guard<std::mutex> publisher_sessions_lock(me->publisher_sessions_mtx_);
-                    me->publisher_sessions_.push_back(session);
+                    me->readPayload(header);
                 }
-
-                me->acceptClient();
-            });
+            }));
 }
 
-bool PublisherImpl::send(const std::vector<std::pair<const char* const, const size_t>>& payloads)
+void PublisherSession::discardDataBetweenHeaderAndPayload(const std::shared_ptr<TCPHeader>& header, 
+        uint16_t bytes_to_discard)
 {
-    if (!is_running)
-    {
-        std::cout << "Publisher::send " << localEndPointToString() + ": Tried to send data to a non-running publisher." << std::endl;
-        return false;
-    }
+    if (state_ == State::Canceled)
+        return;
 
-    {
-        std::lock_guard<std::mutex> publisher_sessions_lock(publisher_sessions_mtx_);
-        if (publisher_sessions_.empty())
-        {
-            return true;
-        }
-    }
+    std::vector<char> data_to_discard;
+    data_to_discard.resize(bytes_to_discard);
 
-    std::shared_ptr<std::vector<char>> buffer = buffer_pool.allocate();
-    std::stringstream buffer_pointer_ss;
-    buffer_pointer_ss << "0x" << std::hex << buffer.get();
-    const std::string buffer_pointer_string = buffer_pointer_ss.str();
-
-    {
-        size_t header_size = sizeof(TCPHeader);
-        size_t entire_payload_size = 0;
-        for (const auto& payload : payloads)
-        {
-            entire_payload_size += payload.second;
-        }
-
-        const size_t compelete_size = header_size + entire_payload_size;
-
-        if (buffer->capacity() < compelete_size)
-        {
-            buffer->reverse(static_cast<size_t>(compelete_size * 1.1));
-        }
-
-        buffer->resieze(compelete_size);
-
-        auto header = reinterpret_cast<stps::TCPHeader*>(&(*buffer)[0]);
-        header->header_size = htole16(sizeof(TCPHeader));
-        header->type = MessageContentType::RegularPayload;
-        header->reserved = 0;
-        header->data_size = htole64(entire_payload_size);
-        
-        size_t current_position = header_size;
-
-        for (const auto& payload : payloads)
-        {
-            if (payload.first && (payload.second > 0))
-            {
-                memcpy(&((*buffer)[current_position]), payload.first, payload.second);
-                current_position += payload.second;
-            }
-        }
-    }
-
-    {
-        std::lock_guard<std::mutex> publisher_session_lock(publisher_sessions_mtx_);
-
-        for (const auto& publisher_session : publisher_sessions_)
-        {
-            publisher_session->sendDataBuffer(buffer);
-        }
-    }
-
-    return true;
+    asio::async_read(data_socket_,
+            asio::buffer(data_to_discard.data(), bytes_to_discard),
+            asio::transfer_at_least(bytes_to_discard),
+            data_strand_.wrap([me = shared_from_this(), header](asio::error_code ec, std::size_t)
+                {
+                    if (ec)
+                    {
+                        me->sessionClosedHandler();
+                        return;
+                    }
+                    me->readPayload(header);
+                }));
 }
 
-uint16_t PublisherImpl::getPort() const
+void PublisherSession::readPayload(const std::shared_ptr<TCPHeader>& header)
 {
-    if (is_running_)
+    if (state_ == State::Canceled)
+        return;
+
+    if (header->data_size == 0)
     {
-        asio::error_code ec;
-        auto local_endpoint = acceptor_.local_endpoint();
-        if (!ec)
-            return local_endpoint.port();
+        sessionClosedHandler();
+        return;
+    }
+
+    std::shared_ptr<std::vector<char>> data_buffer = 
+        std::make_shared<std::vector<char>>();
+    data_buffer->resize(le64toh(header->data_size));
+
+    asio::async_read(data_socket_,
+            asio::buffer(data_buffer->data(), le64toh(header->data_size)),
+            asio::transfer_at_least(le64toh(header->data_size)),
+            data_strand_.wrap([me = shared_from_this(), header,
+                data_buffer](asio::error_code ec, std::size_t)
+                {
+                    if (ec)
+                    {
+                        me->sessionClosedHandler();
+                        return;
+                    }
+
+                    if (header->type == MessageContentType::ProtocolHandshake)
+                    {
+                        ProtocolHandshakeMessage handshake_message;
+                        size_t bytes_to_copy = std::min(data_buffer->size(),
+                                sizeof(ProtocolHandshakeMessage));
+                        std::memcpy(&handshake_message, data_buffer->data(),
+                                bytes_to_copy);
+                        me->sendProtocolHandshakeResponse();
+                    }
+                    else
+                    {
+                        me->sessionClosedHandler();
+                    }
+                }));
+}
+
+void PublisherSession::sendProtocolHandshakeResponse()
+{
+    if (state_ == State::Canceled) return;
+
+    std::shared_ptr<std::vector<char>> buffer = std::make_shared<std::vector<char>>();
+    buffer->resize(sizeof(TCPHeader) + sizeof(ProtocolHandshakeMessage));
+
+    TCPHeader* header = reinterpret_cast<TCPHeader*>(buffer->data());
+    header->header_size = htole16(sizeof(TCPHeader));
+    header->type = MessageContentType::ProtocolHandshake;
+    header->reserved = 0;
+    header->data_size = htole64(sizeof(ProtocolHandshakeMessage));
+
+    ProtocolHandshakeMessage* handshake_message = 
+        reinterpret_cast<ProtocolHandshakeMessage*>(&(buffer->operator[](sizeof(TCPHeader))));
+    handshake_message->protocol_version = 0;
+
+    sendBufferToClient(buffer);
+    State old_state = state_.exchange(State::Running);
+    if (old_state != State::Handshaking) state_ = old_state;
+}
+
+void PublisherSession::sendDataBuffer(const std::shared_ptr<std::vector<char>>& buffer)
+{
+    if (state_ == State::Canceled) return;
+
+    {
+        std::lock_guard<std::mutex> next_buffer_lock(next_buffer_mutex_);
+
+        if ((state_ == State::Running) && !sending_in_progress_)
+        {
+            sending_in_progress_ = true;
+            sendBufferToClient(buffer);
+        }
         else
-            return 0;
-    }
-    else
-    {
-        return 0;
+        {
+            next_buffer_to_send_ = buffer;
+        }
     }
 }
 
-size_t PublisherImpl::getSubscriberCount() const
+void PublisherSession::sendBufferToClient(const std::shared_ptr<std::vector<char>>& buffer)
 {
-    std::lock_guard<std::mutex> publisher_sessions_lock(publisher_sessions_mtx_);
-    return publisher_sessions_.size();
+    if (state_ == State::Canceled) return;
+
+    asio::async_write(data_socket_,
+            asio::buffer(*buffer),
+            data_strand_.wrap([me = shared_from_this(), buffer](asio::error_code ec, std::size_t)
+                {
+                    if (ec)
+                    {
+                        me->sessionClosedHandler();
+                        return;
+                    }
+
+                    if (me->state_ == State::Canceled)
+                    {
+                        return;
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> next_buffer_lock(me->next_buffer_mutex_);
+                        if (me->next_buffer_to_send_)
+                        {
+                            auto next_buffer_tmp = me->next_buffer_to_send_;
+                            me->next_buffer_to_send_ = nullptr;
+                            me->sendBufferToClient(next_buffer_tmp);
+                        }
+                        else
+                        {
+                            me->sending_in_progress_ = false;
+                        }
+                    }
+                }
+                
+                ));
 }
 
-bool PublisherImpl::isRunning() const
+asio::ip::tcp::socket& PublisherSession::getSocket()
 {
-    return is_running_;
+    return data_socket_;
 }
 
-std::string PublisherImpl::toString(const asio::ip::tcp::endpoint& endpoint) const
-{
-    return endpoint.address().to_string() + ":" + std::to_string(endport.port());
-}
-
-std::string PublisherImpl::localEndpointToString() const
+std::string PublisherSession::localEndpointToString() const
 {
     asio::error_code ec;
-    auto local_endpoint = acceptor_.local_endpoint(ec);
+    auto local_endpoint = data_socket_.local_endpoint(ec);
     if (!ec)
-        return toString(local_endpoint);
+        return local_endpoint.address().to_string() + ":" + std::to_string(local_endpoint.port());
     else
         return "?";
 }
 
-} // namesoace 
+std::string PublisherSession::remoteEndpointToString() const
+{
+    asio::error_code ec;
+    auto remote_endpoint = data_socket_.remote_endpoint(ec);
+    if (!ec)
+        return remote_endpoint.address().to_string() + ":" + std::to_string(remote_endpoint.port());
+    else
+        return "?";
+}
+
+std::string PublisherSession::endpointToString() const
+{
+    return localEndpointToString() + "->" + remoteEndpointToString();
+}
+
+} // namespace stps

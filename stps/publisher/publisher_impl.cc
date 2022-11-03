@@ -1,8 +1,10 @@
 #include <stps/publisher/publisher_impl.h>
 #include <stps/tcp_header.h>
 #include <stps/executor/executor_impl.h>
-
+#include <iostream>
 #include "endian.h"
+
+#include <asio/socket_base.hpp>
 
 namespace stps
 {
@@ -43,7 +45,7 @@ bool PublisherImpl::start(const std::string& address, uint16_t port)
 
     {
         asio::error_code ec;
-        accept_.open(endpoint.protocol(), ec);
+        acceptor_.open(endpoint.protocol(), ec);
         if (ec)
         {
             std::cout << "Publisher " << toString(endpoint) 
@@ -76,7 +78,7 @@ bool PublisherImpl::start(const std::string& address, uint16_t port)
 
     {
         asio::error_code ec;
-        acceptor_.listen(asio::asio::socket_base::max_listen_connections, ec);
+        acceptor_.listen(asio::socket_base::max_listen_connections, ec);
         if (ec)
         {
             std::cout << "Publisher " << toString(endpoint) 
@@ -139,9 +141,9 @@ void PublisherImpl::acceptClient()
             }
         };
 
-    auto session = std::make_shared<PublsiherSession>(executor_->executor_impl_->ioService(), 
+    auto session = std::make_shared<PublisherSession>(executor_->executor_impl_->ioService(), 
             publisher_session_closed_handler);
-    acceptor_.async_accept(session->getSocekt(), 
+    acceptor_.async_accept(session->getSocket(), 
             [session, me = shared_from_this()](asio::error_code ec)
             {
                 if (ec)
@@ -189,7 +191,7 @@ bool PublisherImpl::send(const std::vector<std::pair<const char* const, const si
         }
     }
 
-    std::shared_ptr<std::vector<char>> buffer = buffer_pool.allocate();
+    std::shared_ptr<std::vector<char>> buffer = buffer_pool_.allocate();
     
     std::stringstream buffer_pointer_ss;
     buffer_pointer_ss << "0x" << std::hex << buffer.get();

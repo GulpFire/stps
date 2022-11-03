@@ -1,11 +1,12 @@
 #pragma once
 
-#include <functional>
-#include <deque>
+#include <stps/tcp_header.h>
 
 #include <asio.hpp>
 
-#include "tcp_header.h"
+#include <functional>
+#include <deque>
+#include <mutex>
 
 namespace stps
 {
@@ -15,7 +16,7 @@ namespace stps
 			enum class State
 			{
 				NotStarted,
-				HandShaking,
+				Handshaking,
 				Running,
 				Canceled
 			};
@@ -58,21 +59,21 @@ namespace stps
 			bool sending_in_progress_;
 			std::shared_ptr<std::vector<char>> next_buffer_to_send_;
 
-			void sessionCloseHandler();
+			void sessionClosedHandler();
 
 			void receiveTcpPacket();
 			
 			void readHeaderLength();
 
-			void discardDataBetweenHeaderAndPayload(const std::shared_ptr<TcpHeader>& header, 
+			void discardDataBetweenHeaderAndPayload(const std::shared_ptr<TCPHeader>& header, 
 					uint16_t bytes_to_discard);
 
-			void readHeaderContent(const std::shared_ptr<TcpHeader>& header);
+			void readHeaderContent(const std::shared_ptr<TCPHeader>& header);
 
-			void readPayload(const std::shared_ptr<TcpHeader>& header);
+			void readPayload(const std::shared_ptr<TCPHeader>& header);
 
 			void sendProtocolHandshakeResponse();
 
 			void sendBufferToClient(const std::shared_ptr<std::vector<char>>& buf);
-	}
+	};
 } // namespace stps

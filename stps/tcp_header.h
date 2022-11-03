@@ -8,7 +8,7 @@ namespace stps
 enum class MessageContentType : uint8_t
 {
 	RegularPayload = 0,
-	ProtocolHandShake = 1
+	ProtocolHandshake = 1
 };
 
 #pragma pack(push,1)
@@ -16,7 +16,7 @@ enum class MessageContentType : uint8_t
 struct TCPHeader
 {
 	uint16_t header_size = 0;
-	MessageContentType = MessageContentType::RegularPayload;
+	MessageContentType type = MessageContentType::RegularPayload;
 	uint8_t reserved = 0;
 	uint64_t data_size = 0;
 };

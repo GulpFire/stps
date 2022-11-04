@@ -1,1 +1,1 @@
-/usr/bin/c++ -rdynamic CMakeFiles/hello_world_publisher.dir/hello_world_publisher/hello_world_publisher.cc.o -o hello_world_publisher  ../../libstps.a -lpthread -lasio 
+/usr/bin/c++ -rdynamic CMakeFiles/hello_world_publisher.dir/hello_world_publisher/hello_world_publisher.cc.o -o hello_world_publisher  -Wl,-rpath,/usr/local/lib ../../libstps.a -lpthread /usr/local/lib/libboost_system.so /usr/local/lib/libboost_filesystem.so 

@@ -17,7 +17,7 @@ int main()
         {
             std::string temp_string_representation(callback_data.buffer_->data(), 
                     callback_data.buffer_->size());
-            std::cout << "Received payload: " << temp_string_represetation << std::endl;
+            std::cout << "Received payload: " << temp_string_representation << std::endl;
         };
 
     hello_world_subscriber.setCallback(callback_function);

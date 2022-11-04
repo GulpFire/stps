@@ -1,14 +1,14 @@
 #pragma once
 
 #include <stps/tcp_header.h>
-
+#include <thread>
 #include <string>
 #include <vector>
 #include <memory>
 #include <functional>
-
-#include <asio.hpp>
-
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio.hpp>
+using namespace boost;
 namespace stps
 {
 class SubscriberSessionImpl : public std::enable_shared_from_this<SubscriberSessionImpl>
@@ -23,7 +23,7 @@ class SubscriberSessionImpl : public std::enable_shared_from_this<SubscriberSess
         SubscriberSessionImpl& operator=(const SubscriberSessionImpl&) = delete;
         SubscriberSessionImpl& operator=(SubscriberSessionImpl&&) = delete;
         SubscriberSessionImpl(SubscriberSessionImpl&&) = delete;
-
+        ~SubscriberSessionImpl();
         void start();
 
         void setSynchronousCallback(const std::function<void(const std::shared_ptr<std::vector<char>>&, const std::shared_ptr<TCPHeader>&)>& callback);

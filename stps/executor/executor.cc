@@ -4,7 +4,7 @@
 namespace stps {
 
 Executor::Executor(size_t thread_count)
-	: executor_impl_()
+	: executor_impl_(std::make_shared<ExecutorImpl>())
 {
 	executor_impl_->start(thread_count);
 }

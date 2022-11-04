@@ -5,7 +5,7 @@ set(CARES_STATIC ON CACHE INTERNAL "")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/modules)
 
-find_package(asio REQUIRED 1.24)
+find_package(Boost REQUIRED system filesystem)
 find_package(recycle REQUIRED)
 
 set(STPS_SOURCE_FILES
@@ -44,8 +44,8 @@ add_library(${PROJECT_NAME} STATIC ${STPS_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_definitions(${PROJECT_NAME} PRIVATE ASIO_STANDALONE ASIO_DISABLE_VISIBILITY)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
-target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty)
-target_link_libraries(${PROJECT_NAME} PUBLIC pthread asio recycle)
-target_compile_options(${PROJECT_NAME} PUBLIC -Wall -Wextra -pipe)
+target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty ${Boost_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PUBLIC pthread ${Boost_LIBRARIES} recycle)
+target_compile_options(${PROJECT_NAME} PUBLIC -Wall -Wextra -pipe -lboost_system)
 
 add_subdirectory(examples)

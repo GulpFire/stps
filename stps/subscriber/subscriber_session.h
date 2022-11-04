@@ -19,6 +19,7 @@ class SubscriberSession
     SubscriberSession& operator=(SubscriberSession&) = default;
     SubscriberSession(SubscriberSession&&) = default;
 
+    ~SubscriberSession();
     std::string getAddress() const;
     uint16_t getPort() const;
     void cancel();

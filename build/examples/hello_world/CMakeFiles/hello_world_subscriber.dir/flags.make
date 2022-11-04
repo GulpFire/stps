@@ -6,5 +6,5 @@ CXX_DEFINES =
 
 CXX_INCLUDES = -I/home/sy/Projects/stps -I/home/sy/Projects/stps/thirdparty -I/home/sy/Projects/stps/thirdparty/recycle/src
 
-CXX_FLAGS = -Wall -Wextra -pipe
+CXX_FLAGS = -Wall -Wextra -pipe -lboost_system
 

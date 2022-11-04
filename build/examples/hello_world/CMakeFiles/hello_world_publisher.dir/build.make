@@ -93,6 +93,8 @@ hello_world_publisher_EXTERNAL_OBJECTS =
 examples/hello_world/hello_world_publisher: examples/hello_world/CMakeFiles/hello_world_publisher.dir/hello_world_publisher/hello_world_publisher.cc.o
 examples/hello_world/hello_world_publisher: examples/hello_world/CMakeFiles/hello_world_publisher.dir/build.make
 examples/hello_world/hello_world_publisher: libstps.a
+examples/hello_world/hello_world_publisher: /usr/local/lib/libboost_system.so
+examples/hello_world/hello_world_publisher: /usr/local/lib/libboost_filesystem.so
 examples/hello_world/hello_world_publisher: examples/hello_world/CMakeFiles/hello_world_publisher.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/sy/Projects/stps/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable hello_world_publisher"
 	cd /home/sy/Projects/stps/build/examples/hello_world && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/hello_world_publisher.dir/link.txt --verbose=$(VERBOSE)

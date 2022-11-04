@@ -1,10 +1,11 @@
 #include <stps/publisher/publisher.h>
 #include <stps/publisher/publisher_impl.h>
 #include <stps/executor/executor_impl.h>
-
+#include <iostream>
 namespace stps
 {
 Publisher::Publisher(const std::shared_ptr<Executor>& executor, const std::string& address, uint16_t port)
+    :  publisher_impl_(std::make_shared<PublisherImpl>(executor))
 {
     publisher_impl_->start(address, port);        
 }
@@ -40,7 +41,7 @@ bool Publisher::send(const char* const data, size_t size) const
     return this->send({{data, size}});
 }
 
-void Publisher::send(const std::vector<std::pair<const char* const, const size_t>>& payloads) const
+bool Publisher::send(const std::vector<std::pair<const char* const, const size_t>>& payloads) const
 {
     return publisher_impl_->send(payloads);
 }

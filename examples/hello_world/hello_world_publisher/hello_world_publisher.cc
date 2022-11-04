@@ -6,10 +6,12 @@
 
 int main()
 {
+    std::cout << "Executor Init." << std::endl;
     std::shared_ptr<stps::Executor> executor = 
         std::make_shared<stps::Executor>(6);
 
     int counter = 0;
+    std::cout << "Publisher Init." << std::endl;
     stps::Publisher hello_world_publisher(executor, 1588);
 
     for (;;)

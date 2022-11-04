@@ -2,11 +2,13 @@
 
 #include <stps/tcp_header.h>
 
-#include <asio.hpp>
+#include <boost/asio.hpp>
 
 #include <functional>
 #include <deque>
 #include <mutex>
+
+using namespace boost;
 
 namespace stps
 {

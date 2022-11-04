@@ -4,7 +4,6 @@
 #include <iostream>
 #include "endian.h"
 
-#include <asio/socket_base.hpp>
 
 namespace stps
 {
@@ -13,7 +12,6 @@ PublisherImpl::PublisherImpl(const std::shared_ptr<Executor>& executor)
     , executor_(executor)
     , acceptor_(*executor_->executor_impl_->ioService())
 {
-
 }
 
 PublisherImpl::~PublisherImpl()
@@ -32,8 +30,8 @@ PublisherImpl::~PublisherImpl()
 
 bool PublisherImpl::start(const std::string& address, uint16_t port)
 {
-    asio::error_code make_address_ec;
-    asio::ip::tcp::endpoint endpoint(asio::ip::make_address(address, 
+    system::error_code make_address_ec;
+    asio::ip::tcp::endpoint endpoint(asio::ip::address::from_string(address, 
                 make_address_ec), port);
     if (make_address_ec)
     {
@@ -44,7 +42,7 @@ bool PublisherImpl::start(const std::string& address, uint16_t port)
     }
 
     {
-        asio::error_code ec;
+        system::error_code ec;
         acceptor_.open(endpoint.protocol(), ec);
         if (ec)
         {
@@ -55,7 +53,7 @@ bool PublisherImpl::start(const std::string& address, uint16_t port)
     }
 
     {
-        asio::error_code ec;
+        system::error_code ec;
         acceptor_.set_option(asio::ip::tcp::acceptor::reuse_address(true), ec);
         if (ec)
         {
@@ -66,7 +64,7 @@ bool PublisherImpl::start(const std::string& address, uint16_t port)
     }
 
     {
-        asio::error_code ec;
+        system::error_code ec;
         acceptor_.bind(endpoint, ec);
         if (ec)
         {
@@ -77,8 +75,8 @@ bool PublisherImpl::start(const std::string& address, uint16_t port)
     }
 
     {
-        asio::error_code ec;
-        acceptor_.listen(asio::basic_socket::max_listen_connections, ec);
+        system::error_code ec;
+        acceptor_.listen(asio::socket_base::max_connections, ec);
         if (ec)
         {
             std::cout << "Publisher " << toString(endpoint) 
@@ -96,7 +94,7 @@ bool PublisherImpl::start(const std::string& address, uint16_t port)
 void PublisherImpl::cancel()
 {
     {
-        asio::error_code ec;
+        system::error_code ec;
         acceptor_.close(ec);
         acceptor_.cancel(ec);
     }
@@ -144,7 +142,7 @@ void PublisherImpl::acceptClient()
     auto session = std::make_shared<PublisherSession>(executor_->executor_impl_->ioService(), 
             publisher_session_closed_handler);
     acceptor_.async_accept(session->getSocket(), 
-            [session, me = shared_from_this()](asio::error_code ec)
+            [session, me = shared_from_this()](system::error_code ec)
             {
                 if (ec)
                 {
@@ -246,7 +244,7 @@ uint16_t PublisherImpl::getPort() const
 {
     if (is_running_)
     {
-        asio::error_code ec;
+        system::error_code ec;
         auto local_endpoint = acceptor_.local_endpoint();
         if (!ec)
             return local_endpoint.port();
@@ -277,7 +275,7 @@ std::string PublisherImpl::toString(const asio::ip::tcp::endpoint& endpoint) con
 
 std::string PublisherImpl::localEndpointToString() const
 {
-    asio::error_code ec;
+    system::error_code ec;
     auto local_endpoint = acceptor_.local_endpoint(ec);
     if (!ec)
         return toString(local_endpoint);

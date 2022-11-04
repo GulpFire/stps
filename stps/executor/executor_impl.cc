@@ -4,9 +4,10 @@
 namespace stps
 {
 	ExecutorImpl::ExecutorImpl()
-		: io_service_(std::make_shared<asio::io_service>())
-		, dummy_work_(std::make_shared<asio::io_service::work>(*io_service_))
-	{
+        : io_service_(std::make_shared<asio::io_service>())
+        , dummy_work_(std::make_shared<asio::io_service::work>(*io_service_))
+    {
+
 	}
 
 	ExecutorImpl::~ExecutorImpl()

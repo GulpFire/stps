@@ -7,7 +7,9 @@
 #include <vector>
 #include <memory>
 
-#include <asio.hpp>
+#include <boost/asio.hpp>
+
+using namespace boost;
 
 namespace stps
 {

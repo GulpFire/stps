@@ -19,7 +19,7 @@ class  Publisher
         Publisher(const std::shared_ptr<Executor>& executor, const std::string& address, uint16_t port);
         Publisher(const std::shared_ptr<Executor>& excutor, uint16_t port = 0);
         Publisher(const Publisher&) = default;
-        Publisher& operator=(Const Publisher&) = default;
+        Publisher& operator=(const Publisher&) = default;
         
         Publisher& operator=(Publisher&&) = default;
         Publisher(Publisher&&) = default;
@@ -30,7 +30,7 @@ class  Publisher
         size_t getSubscriberCount() const;
         bool isRunning() const;
         bool send(const char* const data, size_t size) const;
-        bool send(const std::vector<std::pair<const char* const, const size_t>>& buffers) const;
+        bool send(const std::vector<std::pair<const char* const, const size_t>>& payloads) const;
 
         void cancel();
 

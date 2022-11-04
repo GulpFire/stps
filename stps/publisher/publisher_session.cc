@@ -32,7 +32,7 @@ PublisherSession::~PublisherSession()
 void PublisherSession::start()
 {
     {
-        asio::error_code ec;
+        system::error_code ec;
         data_socket_.set_option(asio::ip::tcp::no_delay(true), ec);
         if (ec)
             std::cout << "PublisherSession " << endpointToString() 
@@ -56,11 +56,16 @@ void PublisherSession::sessionClosedHandler()
         return;
 
     {
-        asio::error_code ec;
+        system::error_code ec;
         data_socket_.close(ec);
     }
 
     session_closed_handler_(shared_from_this());
+}
+
+void PublisherSession::receiveTcpPacket()
+{
+    readHeaderLength();
 }
 
 void PublisherSession::readHeaderLength()
@@ -72,7 +77,7 @@ void PublisherSession::readHeaderLength()
     asio::async_read(data_socket_, 
             asio::buffer(&(header->header_size), sizeof(header->header_size)),
             asio::transfer_at_least(sizeof(header->header_size)),
-            data_strand_.wrap([me = shared_from_this(), header](asio::error_code ec, std::size_t)
+            data_strand_.wrap([me = shared_from_this(), header](system::error_code ec, std::size_t)
                 {
                     if (ec)
                     {
@@ -107,7 +112,7 @@ void PublisherSession::readHeaderContent(const std::shared_ptr<TCPHeader>& heade
                 bytes_to_read_from_socket),
             asio::transfer_at_least(bytes_to_read_from_socket),
             data_strand_.wrap([me = shared_from_this(), header,
-            bytes_to_discard_from_socket](asio::error_code ec, std::size_t)
+            bytes_to_discard_from_socket](system::error_code ec, std::size_t)
             {
                 if (ec)
                 {
@@ -137,7 +142,7 @@ void PublisherSession::discardDataBetweenHeaderAndPayload(const std::shared_ptr<
     asio::async_read(data_socket_,
             asio::buffer(data_to_discard.data(), bytes_to_discard),
             asio::transfer_at_least(bytes_to_discard),
-            data_strand_.wrap([me = shared_from_this(), header](asio::error_code ec, std::size_t)
+            data_strand_.wrap([me = shared_from_this(), header](system::error_code ec, std::size_t)
                 {
                     if (ec)
                     {
@@ -167,7 +172,7 @@ void PublisherSession::readPayload(const std::shared_ptr<TCPHeader>& header)
             asio::buffer(data_buffer->data(), le64toh(header->data_size)),
             asio::transfer_at_least(le64toh(header->data_size)),
             data_strand_.wrap([me = shared_from_this(), header,
-                data_buffer](asio::error_code ec, std::size_t)
+                data_buffer](system::error_code ec, std::size_t)
                 {
                     if (ec)
                     {
@@ -238,7 +243,7 @@ void PublisherSession::sendBufferToClient(const std::shared_ptr<std::vector<char
 
     asio::async_write(data_socket_,
             asio::buffer(*buffer),
-            data_strand_.wrap([me = shared_from_this(), buffer](asio::error_code ec, std::size_t)
+            data_strand_.wrap([me = shared_from_this(), buffer](system::error_code ec, std::size_t)
                 {
                     if (ec)
                     {
@@ -276,7 +281,7 @@ asio::ip::tcp::socket& PublisherSession::getSocket()
 
 std::string PublisherSession::localEndpointToString() const
 {
-    asio::error_code ec;
+    system::error_code ec;
     auto local_endpoint = data_socket_.local_endpoint(ec);
     if (!ec)
         return local_endpoint.address().to_string() + ":" + std::to_string(local_endpoint.port());
@@ -286,7 +291,7 @@ std::string PublisherSession::localEndpointToString() const
 
 std::string PublisherSession::remoteEndpointToString() const
 {
-    asio::error_code ec;
+    system::error_code ec;
     auto remote_endpoint = data_socket_.remote_endpoint(ec);
     if (!ec)
         return remote_endpoint.address().to_string() + ":" + std::to_string(remote_endpoint.port());

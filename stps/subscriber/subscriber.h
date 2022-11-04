@@ -4,6 +4,7 @@
 #include <stps/subscriber/subscriber_session.h>
 #include <stps/callback_data.h>
 
+#include <functional>
 #include <stdint.h>
 #include <memory>
 #include <chrono>
